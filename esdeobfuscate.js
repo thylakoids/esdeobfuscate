@@ -457,3 +457,4 @@ var esdeobfuscate = (function() {
         deobfuscate: const_collapse
     };
 })();
+module.exports = esdeobfuscate
