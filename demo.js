@@ -1,7 +1,8 @@
-var a = 1+4
-b = a
-function c(){
-a = a+2
+function fa(){
+    var va  = 1
+    fb(10)
 }
-c()
-console.log(a, b)
+function fb(x){
+    return va + x
+}
+fa()
