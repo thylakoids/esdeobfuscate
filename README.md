@@ -15,3 +15,10 @@ ESDeobfuscate works with Syntax Trees provided by [esprima](https://github.com/a
 ## Demo
 
 [m1el.github.io/esdeobfuscate](http://m1el.github.io/esdeobfuscate/)
+
+## Development
+
+Always add `pure` and `value` property to a processed ast node.
+
+### One scope
+
