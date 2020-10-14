@@ -22,7 +22,11 @@
   THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
+var DEBUGNAME = __filename.slice(__dirname.length + 1, -3);
+var debug = require('util').debuglog(DEBUGNAME);
+
 esprima = require('esprima')
+recast = require('recast')
 
 var esdeobfuscate = (function () {
     var boperators = {
@@ -30,15 +34,29 @@ var esdeobfuscate = (function () {
         '-': function (a, b) {return a - b;},
         '*': function (a, b) {return a * b;},
         '/': function (a, b) {return a / b;},
+        '%': function (a, b) {return a % b;},
+
+        '<<': function (a, b) {return a << b;},
+        '>>': function (a, b) {return a >> b;},
+        '>>>': function (a, b) {return a >>> b;},
+
+        '>': function (a, b) {return a > b;},
+        '<': function (a, b) {return a < b;},
+        '>=': function (a, b) {return a >= b;},
+        '<=': function (a, b) {return a <= b;},
+        '==': function (a, b) {return a == b;},
+        '===': function (a, b) {return a === b;},
+        '!=': function (a, b) {return a != b;},
+        '!==': function (a, b) {return a !== b;},
+        'in': function (a, b) {return a in b;},
+        'instanceof': function (a, b) {return a instanceof b;},
+
         '||': function (a, b) {return a || b;},
         '&&': function (a, b) {return a && b;},
         '|': function (a, b) {return a | b;},
         '&': function (a, b) {return a & b;},
-        '%': function (a, b) {return a % b;},
         '^': function (a, b) {return a ^ b;},
-        '<<': function (a, b) {return a << b;},
-        '>>': function (a, b) {return a >> b;},
-        '>>>': function (a, b) {return a >>> b;},
+
     };
     var uoperators = {
         '!': function (a) {return !a;},
@@ -139,24 +157,70 @@ var esdeobfuscate = (function () {
             raw: JSON.stringify(value)
         };
     }
-    var scopes={}
-    function const_collapse(ast, scope, expandvars) {
-        function ispure(ast) {
-            return (
-                ast.pure
-                || (ast.type === 'Identifier'
-                    && ast.name in scope
-                    && scope[ast.name].pure)
-            )
+
+    function pureValue(ast) {
+        // if a node is pure, return its value. 
+        // if it is a Identifier then check scope.
+        var ret = {pure: false, value: undefined, scope: null, scopevar: false, name: null}
+        if (ast.pure) {
+            ret.pure = true;
+            ret.value = ast.value;
         }
+        if (ast.type === 'Identifier') {
+            Object.keys(scopes).map(function (k) {
+                if (ast.name in scopes[k]
+                    && scopes[k][ast.name].pure) {
+                    ret = {pure: true, value: scopes[k][ast.name].value, scope: scopes[k], scopevar: true, name: ast.name}
+                }
+            })
+        }
+        return ret
+    }
+
+    function getGscope(vars) {
+        let gscope = {}
+        vars.map(function (k) {
+            gscope[k] = {pure: true, value: global[k]}
+        })
+        return gscope
+    }
+    function update_scope(scope, gscope) {
+        Object.keys(gscope).map(function (k) {
+            scope[k] = gscope[k]
+        })
+    }
+    function getlscope() {
+
+    }
+
+    const global_vars = ["console", "window", "document", "String", "Object", "Array", "eval",
+        "Number", "Boolean", "RegExp", "JSON", "escape", "unescape",
+        "decodeURIComponent", "encodeURI", "encodeURIComponent",
+        "Date", "Error", "EvalError", "Function", "Infinity",
+        "Math", "NaN", "RangeError", "ReferenceError",
+        "SyntaxError", "TypeError", "URIError", "decodeURI",
+        "isFinite", "isNaN", "parseFloat", "parseInt", "undefined", "null",
+        "ArrayBuffer", "Buffer", "Float32Array", "Float64Array",
+        "Int16Array", "Int32Array", "Int8Array", "Uint16Array",
+        "Uint32Array", "Uint8Array", "Uint8ClampedArray",
+        "clearImmediate", "clearInterval", "clearTimeout",
+        "setImmediate", "setInterval", "setTimeout", "atob", "btoa"
+    ];
+
+    var scopes = {
+        gscope: getGscope(global_vars),
+        scope: {},
+    }
+    function const_collapse(ast, scope, expandvars) {
         scope = scope || {}
-        scopes.scope = scope
         expandvars = expandvars && true;
         if (!ast) return ast;
         var const_collapse_scoped = function (e) {
             return const_collapse(e, scope, expandvars);
         };
-        var ret, left, right, arg, name, value, fscope, last, pure;
+        var ret, left, right, arg, name, value, fscope, last, pure, pureState;
+        scopes.scope = scope
+
         switch (ast.type) {
             case 'LogicalExpression':
             case 'BinaryExpression':
@@ -243,70 +307,46 @@ var esdeobfuscate = (function () {
                 }
 
                 //String.fromCharCode
-                if (match(ret.callee, {
-                    type: 'MemberExpression',
-                    object: {type: 'Identifier', name: 'String'},
-                    property: {type: 'Identifier', name: 'fromCharCode'}
-                }) || match(ret.callee, {
-                    type: 'MemberExpression',
-                    object: {type: 'Identifier', name: 'String'},
-                    property: {type: 'Literal', value: 'fromCharCode'}
-                }) && ret.purearg) {
-                    value = String.fromCharCode.apply(String,
-                        ret.arguments.map(function (e) {return e.value;}));
-                    return mkliteral(value);
-                }
+                // if (match(ret.callee, {
+                //     type: 'MemberExpression',
+                //     object: {type: 'Identifier', name: 'String'},
+                //     property: {type: 'Identifier', name: 'fromCharCode'}
+                // }) || match(ret.callee, {
+                //     type: 'MemberExpression',
+                //     object: {type: 'Identifier', name: 'String'},
+                //     property: {type: 'Literal', value: 'fromCharCode'}
+                // }) && ret.purearg) {
+                //     value = String.fromCharCode.apply(String,
+                //         ret.arguments.map(function (e) {return e.value;}));
+                //     return mkliteral(value);
+                // }
 
                 //[1,2,3].pop()
                 /*object.property(arg)
                 Is object and arg pure? Is property in arrayf?
                 1. IF object is in scope, and function changes scope value, then 
                     update its value, relace ast with SequentialExpression.
-                2.OTHERWISE, replace with Literal value.*/
+                2.OTHERWISE, replace with Literal value.
+                3.这里参数传递都是引用， 如果不是会出错。这里的函数的this都必须是Object，保证参数传递是引用.
+                    */
                 let fname = ret.callee.property.name || ret.callee.property.value
-                let unchangef = ['join', 'concat', 'charCodeAt']
+                let unchangef = ['join', 'concat', 'charCodeAt', 'slice', 'split', 'fromCharCode']
                 let changef = ['push', 'pop', 'shift', 'unshift', 'splice', 'reverse']
                 let arrayf = unchangef.concat(changef)
+                pureState = pureValue(ret.callee.object)
                 if ((match(ret.callee, {
                     type: 'MemberExpression',
                     property: {type: 'Identifier'}
                 }) || match(ret.callee, {
                     type: 'MemberExpression',
                     property: {type: 'Literal'}
-                })) && ret.purearg && ispure(ret.callee.object) && arrayf.indexOf(fname) !== -1) {
-                    if (ast.callee.object.type === 'Identifier') {
-                        //if object in scope, then update its value
-                        name = ast.callee.object.name
-                        value = scope[name].value[fname].apply(scope[name].value, ret.arguments.map(x => x.value))
-                        ret.value = value
-                        ret.pure = true
-                        if (unchangef.indexOf(fname) !== -1) {
-                            return mkliteral(value)
-                        } else {
-                            return {
-                                type: 'SequenceExpression',
-                                expressions: [
-                                    {
-                                        type: 'AssignmentExpression',
-                                        operator: '=',
-                                        left: {
-                                            type: 'Identifier',
-                                            name: name
-                                        },
-                                        right: mkliteral(scope[name].value)
-                                    },
-                                    mkliteral(value)
-                                ],
-                                pure:true,
-                                value:value
-                            }
-
-                        }
-                    } else {
-                        //if object is literal
-                        value = ret.callee.object.value[fname].apply(ret.callee.object.value, ret.arguments.map(x => x.value))
-                        return mkliteral(value)
-                    }
+                })) && ret.purearg && pureState.pure && arrayf.indexOf(fname) !== -1) {
+                    value = pureState.value[fname].apply(
+                        pureState.value,
+                        ret.arguments.map(x => x.value)
+                    )
+                    debug(`code:${recast.print(ast).code} CallExpression:pureState${JSON.stringify(pureState)}`)
+                    return mkliteral(value)
                 }
 
                 //?
@@ -362,33 +402,26 @@ var esdeobfuscate = (function () {
                         name: ret.property.value
                     };
                 }
+                pureState = pureValue(ret.object)
                 if (match(ret, {
                     property: {name: 'length'}
                 }) || match(ret, {
                     object: {type: 'Literal'},
                     property: {type: 'Literal', value: 'length'}
-                }) && ispure(ret.object)) {
-                    if (ret.object.type === 'Identifier') {
-                        value = scope[ret.object.name].value.length
-                    } else {
-                        value = ret.object.value.length
-                    }
-
+                }) && pureState.pure) {
                     return {
                         type: 'Literal',
                         pure: true,
-                        value: value,
+                        value: pureState.value.length,
                         raw: value
-                    };
-                }
-                //a[1]
-                if (ret.property.type === 'Literal' && typeof ret.property.value === 'number' && ispure(ret.object)) {
-                    if (ret.object.type === 'Identifier') {
-                        return mkliteral(scope[ret.object.name].value[ret.property.value])
-                    } else {
-                        return mkliteral(ret.object.value[ret.property.value])
                     }
                 }
+
+                //a[1]
+                if (ret.property.type === 'Literal' && typeof ret.property.value === 'number' && pureState.pure) {
+                    return mkliteral(pureState.value[ret.property.value])
+                }
+
                 return ret;
             case 'VariableDeclaration':
                 ret = {
@@ -556,8 +589,8 @@ var esdeobfuscate = (function () {
                     type: ast.type,
                     expressions: ast.expressions.map(const_collapse_scoped)
                 };
-                ret.pure = ret.expressions.slice(-1).pure
-                ret.value = ret.expressions.slice(-1).value
+                ret.pure = ret.expressions.slice(-1)[0].pure
+                ret.value = ret.expressions.slice(-1)[0].value
                 return ret
             case 'UpdateExpression':
                 ret = {
@@ -613,7 +646,7 @@ var esdeobfuscate = (function () {
     }
     return {
         deobfuscate: const_collapse,
-        scope: scopes
+        scopes: scopes
     };
 })();
 module.exports = esdeobfuscate

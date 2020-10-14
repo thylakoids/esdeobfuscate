@@ -47,8 +47,9 @@ AST:
 ${JSON.stringify(ast, null, 2)}
 ======================
 SCOPES:
-${JSON.stringify(esdeobfuscate.scope, null, 0)}`)
+${JSON.stringify(esdeobfuscate.scopes.scope, null, 0)}`)
 
+// ast = esmangle.optimize(ast)
 var newcode = recast.print(ast).code
 console.log(newcode)
 
