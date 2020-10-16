@@ -107,7 +107,6 @@ var esdeobfuscate = (function () {
         // 6种基本数据类型:undefined, null, boolean, number, string, symbol
         // object:Object, Array, Date, RegExp, Function
         debug('mkliteral(value):', value)
-        debugger
         try {
             if (value === undefined) {
                 return {
@@ -185,6 +184,7 @@ var esdeobfuscate = (function () {
                 }
             }
             if (typeof value === 'object') {
+                //todo
                 ret = {
                     type: 'Identifier',
                     pure: true,
@@ -193,7 +193,11 @@ var esdeobfuscate = (function () {
                 if(value ===  console){
                     ret.name = 'console'
                 }else{
-                    ret.name=/\[object (\w+?)\]/.exec(value.toString())[1]
+                    if(/\[object (\w+?)\]/.test(value.toString())){
+                        ret.name=/\[object (\w+?)\]/.exec(value.toString())[1]
+                    }else{
+                        ret.name = raw
+                    }
                 }
                 if(ret.name === 'object'){ret.name=raw}
                 return ret
@@ -647,7 +651,6 @@ var esdeobfuscate = (function () {
                         return e.pure;
                     });
                     ret.purecallee = pureValue(ret.callee);
-                    debugger
                     if (ret.purecallee.pure && ret.purearg) {
                         ret.pure = true
                         ret.value = new (Function.prototype.bind.apply(ret.callee.value, 
