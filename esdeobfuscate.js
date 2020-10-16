@@ -107,6 +107,7 @@ var esdeobfuscate = (function () {
         // 6种基本数据类型:undefined, null, boolean, number, string, symbol
         // object:Object, Array, Date, RegExp, Function
         debug('mkliteral(value):', value)
+        debugger
         try {
             if (value === undefined) {
                 return {
@@ -184,12 +185,18 @@ var esdeobfuscate = (function () {
                 }
             }
             if (typeof value === 'object') {
-                return {
+                ret = {
                     type: 'Identifier',
-                    name: raw,
                     pure: true,
                     value: value
                 }
+                if(value ===  console){
+                    ret.name = 'console'
+                }else{
+                    ret.name=/\[object (\w+?)\]/.exec(value.toString())[1]
+                }
+                if(ret.name === 'object'){ret.name=raw}
+                return ret
             }
 
             //default:string, boolean, number(+), RegExp
@@ -370,15 +377,15 @@ var esdeobfuscate = (function () {
                         return const_collapse_scoped(esprima.parse(ret.arguments[0].value).body[0].expression)
                     }
 
-                    debugger
                     if (ret.purecallee.pure && ret.purearg){
-                        //console.log
+                        //这里是不执行的函数console.log
                         if([console.log].indexOf(ret.purecallee.value) !==-1){
-                            ret.pure = true
-                            ret.value = ret.purecallee.value.apply(ret.value,
-                                ret.arguments.map(x => x.value))
+                            // ret.pure = true
+                            // ret.value = ret.purecallee.value.apply(ret.value,
+                            //     ret.arguments.map(x => x.value))
                             return ret
                         }
+
                         // 需要this的函数，String 和Array的方法.
                         // 这里调用函数很可能会改变this的值
                         // 这里参数传递都是引用， 如果不是会出错。这里的函数的this都必须是Object，保证参数传递是引用.
@@ -393,6 +400,7 @@ var esdeobfuscate = (function () {
                             )
                             return mkliteral(value)
                         }
+
                         //default
                         //? 函数会改变参数的值的情况怎么处理
                         value = ret.purecallee.value.apply(ret.value,
@@ -464,8 +472,7 @@ var esdeobfuscate = (function () {
                         ret.value = pureobject.value[ret.property.name?ret.property.name:ret.property.value]
                         if (expandvars) {
                             if(typeof ret.value === 'function'){
-                                debugger
-                                if(ret.value.name in global_vars){
+                                if(global_vars.indexOf(ret.value.name)!==-1){
                                     return mkliteral(ret.value) 
                                 }
                             }else{
@@ -639,12 +646,12 @@ var esdeobfuscate = (function () {
                     ret.purearg = ret.arguments.every(function (e) {
                         return e.pure;
                     });
-                    purecallee = pureValue(ret.callee)
-                    if (purecallee.pure && ret.purearg) {
+                    ret.purecallee = pureValue(ret.callee);
+                    debugger
+                    if (ret.purecallee.pure && ret.purearg) {
                         ret.pure = true
-                        ret.value = purecallee.value.apply(ret.value,
-                            ret.arguments.map(x => x.value)
-                        )
+                        ret.value = new (Function.prototype.bind.apply(ret.callee.value, 
+                            [null].concat(ret.arguments.map(x=>x.value)) ))
                     }
                     return ret
                 case 'SequenceExpression':
