@@ -199,7 +199,7 @@ var esdeobfuscate = (function () {
                         ret.name = raw
                     }
                 }
-                if(ret.name === 'object'){ret.name=raw}
+                if(ret.name === 'Object'){ret.name=raw}
                 return ret
             }
 
@@ -439,7 +439,7 @@ var esdeobfuscate = (function () {
                     }
                     return ret;
                 case 'ObjectExpression':
-                    return {
+                    ret =  {
                         type: ast.type,
                         properties: ast.properties.map(function (p) {
                             return {
@@ -449,6 +449,19 @@ var esdeobfuscate = (function () {
                             };
                         })
                     };
+                    if(ret.properties.every(x => x.value.pure)){
+                        ret.pure = true
+                        if(ret.properties.length){
+                            ret.value = {}
+                            ret.properties.map(function(p){
+                                ret.value[p.key.name]=p.value.value
+                            })
+                        }else{
+                            ret.value = {}
+                        }
+                    }
+                    return ret
+
                 case 'MemberExpression':
                     ret = {
                         type: ast.type,
