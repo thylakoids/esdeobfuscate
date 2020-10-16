@@ -202,6 +202,8 @@ var esdeobfuscate = (function () {
         }
         catch (e) {
             debugger
+            console.log(e)
+            process.exit(1)
         }
     }
 
@@ -245,7 +247,7 @@ var esdeobfuscate = (function () {
     //     "clearImmediate", "clearInterval", "clearTimeout",
     //     "setImmediate", "setInterval", "setTimeout", "atob", "btoa"
     // ];
-    const global_vars = ["window", "console", "JSON", "Date",
+    const global_vars = ["window", "console", "JSON", "Date","Math",
         "String", "Object", "Array", "Number", "Boolean", "RegExp", "Symbol",
         "eval", "isNaN", "parseInt",
         "NaN", 'undefined', 'null'
@@ -368,7 +370,8 @@ var esdeobfuscate = (function () {
                         return const_collapse_scoped(esprima.parse(ret.arguments[0].value).body[0].expression)
                     }
 
-                    if (ret.purecallee && ret.purearg){
+                    debugger
+                    if (ret.purecallee.pure && ret.purearg){
                         //console.log
                         if([console.log].indexOf(ret.purecallee.value) !==-1){
                             ret.pure = true
@@ -454,26 +457,20 @@ var esdeobfuscate = (function () {
                     }
                     pureobject = pureValue(ret.object)
                     // a.property
-                    if (pureobject.pure && ret.property.type === 'Identifier') {
+                    // a[1]
+                    if (pureobject.pure && (ret.property.type === 'Identifier' 
+                        ||( ret.property.type === 'Literal' && typeof ret.property.value === 'number'))) {
                         ret.pure = true
-                        ret.value = pureobject.value[ret.property.name]
+                        ret.value = pureobject.value[ret.property.name?ret.property.name:ret.property.value]
                         if (expandvars) {
                             if(typeof ret.value === 'function'){
-                                if(ret.value.name in global){
+                                debugger
+                                if(ret.value.name in global_vars){
                                     return mkliteral(ret.value) 
                                 }
                             }else{
                                 return mkliteral(ret.value)
                             }
-                        }
-                    }
-
-                    //a[1]
-                    if (pureobject.pure && ret.property.type === 'Literal' && typeof ret.property.value === 'number') {
-                        ret.pure = true
-                        ret.value = pureobject.value[ret.property.value]
-                        if (expandvars) {
-                            return mkliteral(ret.value)
                         }
                     }
 
@@ -709,7 +706,11 @@ var esdeobfuscate = (function () {
                     console.log('unknown expression type: ' + ast.type);
                     return ast;
             }
-        } catch (e) {debugger}
+        } catch (e) {
+            debugger
+            console.log(e)
+            process.exit(1)
+        }
     }
     return {
         deobfuscate: const_collapse,
