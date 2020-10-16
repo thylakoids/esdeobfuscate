@@ -28,6 +28,13 @@ var debug = require('util').debuglog(DEBUGNAME);
 esprima = require('esprima')
 recast = require('recast')
 
+const jsdom = require("jsdom");
+const {JSDOM} = jsdom;
+const dom = new JSDOM(`<!DOCTYPE html><p>Hello world</p>`);
+window = dom.window;
+document = window.document;
+XMLHttpRequest = window.XMLHttpRequest;
+
 var esdeobfuscate = (function () {
     var boperators = {
         '+': function (a, b) {return a + b;},
@@ -97,65 +104,91 @@ var esdeobfuscate = (function () {
     }
 
     function mkliteral(value, raw) {
-        if (value instanceof Array) {
-            return {
-                type: 'ArrayExpression',
-                elements: value.map(x => mkliteral(x)),
-                pure: true,
-                value: value
-            }
-        }
-        if (value instanceof RegExp) {
-            return {
-                type: 'Literal',
-                value: value,
-                raw: raw,
-                pure: true
-            };
-        }
-        if (value === undefined) {
-            return {
-                type: 'Identifier',
-                name: 'undefined',
-                pure: true,
-                value: value
-            };
-        }
-        if (value === null) {
-            return {
-                type: 'Identifier',
-                name: 'null',
-                pure: true,
-                value: value
-            };
-        }
-        if (typeof value === 'number' && isNaN(value)) {
-            return {
-                type: 'Identifier',
-                name: 'NaN',
-                pure: true,
-                value: value
-            };
-        } if (value < 0) {
-            return {
-                type: 'UnaryExpression',
-                operator: '-',
-                value: value,
-                pure: true,
-                argument: {
-                    type: 'Literal',
+        debug('mkliteral(value):', value)
+        try {
+            if (typeof value === 'function') {
+                return {
+                    type: 'Identifier',
+                    name: value.name,
                     pure: true,
-                    value: -value,
-                    raw: JSON.stringify(-value)
+                    value: value
                 }
             }
+            if (value instanceof Array) {
+                // todo, empty value
+                // a = []
+                // a[10] = -10
+                return {
+                    type: 'ArrayExpression',
+                    elements: value.map(x => mkliteral(x)),
+                    pure: true,
+                    value: value
+                }
+            }
+            if (value instanceof RegExp) {
+                return {
+                    type: 'Literal',
+                    value: value,
+                    raw: raw,
+                    pure: true
+                };
+            }
+            if (value === undefined) {
+                return {
+                    type: 'Identifier',
+                    name: 'undefined',
+                    pure: true,
+                    value: value
+                };
+            }
+            if (value === null) {
+                return {
+                    type: 'Identifier',
+                    name: 'null',
+                    pure: true,
+                    value: value
+                };
+            }
+            if (typeof value === 'number' && isNaN(value)) {
+                return {
+                    type: 'Identifier',
+                    name: 'NaN',
+                    pure: true,
+                    value: value
+                };
+            }
+            if (value < 0) {
+                return {
+                    type: 'UnaryExpression',
+                    operator: '-',
+                    value: value,
+                    pure: true,
+                    argument: {
+                        type: 'Literal',
+                        pure: true,
+                        value: -value,
+                        raw: JSON.stringify(-value)
+                    }
+                }
+            }
+            if (/\[object (\w+?)\]/.test(value.toString())) {
+                return {
+                    type: 'Identifier',
+                    name: /\[object (\w+?)\]/.exec(value.toString())[1],
+                    pure: true,
+                    value: value
+                }
+            }
+            return {
+                type: 'Literal',
+                pure: true,
+                value: value,
+                raw: JSON.stringify(value)
+            }
         }
-        return {
-            type: 'Literal',
-            pure: true,
-            value: value,
-            raw: JSON.stringify(value)
-        };
+        catch (e) {
+            debugger
+        }
     }
 
     function pureValue(ast) {
@@ -188,9 +221,6 @@ var esdeobfuscate = (function () {
         Object.keys(gscope).map(function (k) {
             scope[k] = gscope[k]
         })
-    }
-    function getlscope() {
-
     }
 
     const global_vars = ["console", "window", "document", "String", "Object", "Array", "eval",
@@ -285,6 +315,23 @@ var esdeobfuscate = (function () {
                         }
                     }
                 }
+                //a[10] = 10
+                //a.b = 10
+                if (match(ret.left, {
+                    type: 'MemberExpression',
+                    object: {type: 'Identifier'}
+                })) {
+                    pureState_object = pureValue(ret.left.object)
+                    pureState_property = pureValue(ret.left.property)
+                    if (pureState_object.pure && pureState_property.pure && typeof pureState_object.value === 'object') {
+                        if (ret.right.pure && (ast.operator === '=' || (ret.left.name in scope && scope[ret.left.name].pure))) {
+                            ret.value = aoperators[ast.operator]((ret.left.name in scope) && scope[ret.left.name].value, ret.right.value)
+                            ret.pure = true
+                            pureState_object.value[pureState_property.value] = ret.value
+                        }
+                    }
+
+                }
                 return ret;
             case 'CallExpression':
                 ret = {
@@ -345,7 +392,6 @@ var esdeobfuscate = (function () {
                         pureState.value,
                         ret.arguments.map(x => x.value)
                     )
-                    debug(`code:${recast.print(ast).code} CallExpression:pureState${JSON.stringify(pureState)}`)
                     return mkliteral(value)
                 }
 
@@ -358,8 +404,9 @@ var esdeobfuscate = (function () {
             case 'Literal':
                 return mkliteral(ast.value, ast.raw);
             case 'Identifier':
-                if (expandvars && ast.name in scope && scope[ast.name].pure) {
-                    return mkliteral(scope[ast.name].value);
+                pureState = pureValue(ast)
+                if (expandvars && pureState.pure) {
+                    return mkliteral(pureState.value);
                 } else {
                     return ast;
                 }
@@ -403,12 +450,12 @@ var esdeobfuscate = (function () {
                     };
                 }
                 pureState = pureValue(ret.object)
-                if (match(ret, {
+                if ((match(ret, {
                     property: {name: 'length'}
                 }) || match(ret, {
                     object: {type: 'Literal'},
                     property: {type: 'Literal', value: 'length'}
-                }) && pureState.pure) {
+                })) && pureState.pure) {
                     return {
                         type: 'Literal',
                         pure: true,
@@ -419,7 +466,13 @@ var esdeobfuscate = (function () {
 
                 //a[1]
                 if (ret.property.type === 'Literal' && typeof ret.property.value === 'number' && pureState.pure) {
-                    return mkliteral(pureState.value[ret.property.value])
+                    if (expandvars) {
+                        return mkliteral(pureState.value[ret.property.value])
+                    } else {
+                        //?
+                        ret.pure = true
+                        ret.value = pureState.value[ret.property.value]
+                    }
                 }
 
                 return ret;

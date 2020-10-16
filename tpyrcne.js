@@ -42,12 +42,16 @@ try {
     process.exit(1)
 }
 
-debug(`
-AST:
-${JSON.stringify(ast, null, 2)}
-======================
-SCOPES:
-${JSON.stringify(esdeobfuscate.scopes.scope, null, 0)}`)
+// debug(`
+// ======================
+// AST:
+// ${ast}
+// ----------------------
+// SCOPES:
+// ${p.pp(esdeobfuscate.scopes.scope)}
+// ======================
+// `)
+debug(ast, '\n----------\nSCOPE:', esdeobfuscate.scopes.scope, '\n----------')
 
 // ast = esmangle.optimize(ast)
 var newcode = recast.print(ast).code

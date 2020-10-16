@@ -1,6 +1,6 @@
 # ESDeobfuscate
 
-ESDeobfuscate is a PoC JavaScriopt AST deobfuscator based on partial evaluation.
+ESDeobfuscate is a PoC JavaScript AST deobfuscator based on partial evaluation.
 
 Constant expressions and functions that return constant values are replaced with corresponding values.
 
@@ -24,6 +24,20 @@ ESDeobfuscate works with Syntax Trees provided by [esprima](https://github.com/a
 
     1. Is this node pure? if pure add pure and value property.
     2. Update scope.
+    3. Expandvars?
+
+### JS Basics
+
+#### 基本数据类型
+
+JavaScript 中共有6中基本数据类型: ·`undefined`, `null`, `boolean`, `number`,
+`string`, `symbol`(new in ES6)
+
+用`typeOf` 来判断基本数据类型
+
+#### 引用类型
+
+统称`object`, 细分的化有:`Object`, `Array`, `Date`, `RegExp`, `Function`
 
 ### CallExpression
 ```js
@@ -53,3 +67,5 @@ console.log([90, 20, 30], -1, "vid", ["v", "i", "d"], [30], 3, 11);
 ```
 
 ## todo
+
+1. add ref to none pure var.
