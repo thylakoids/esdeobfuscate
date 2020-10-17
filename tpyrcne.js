@@ -36,7 +36,12 @@ var code = function () {
 // var currrentScope = scopeManager.acquire(ast);
 var ast = esprima.parse(code)
 try {
-    ast = esdeobfuscate.deobfuscate(ast, {}, true);
+    ast = esdeobfuscate.deobfuscate(ast, {'U6F':{pure:true,value:
+(function anonymous(
+) {
+var a=arguments;return this[a[1]]!==a[0]
+})
+    }}, true);
 } catch (e) {
     console.log(e)
     process.exit(1)

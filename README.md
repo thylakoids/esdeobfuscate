@@ -69,3 +69,13 @@ console.log([90, 20, 30], -1, "vid", ["v", "i", "d"], [30], 3, 11);
 ## todo
 
 1. add ref to none pure var.
+
+## issue
+
+1. [].push(b)
+
+```js
+a = []
+a.push(b)
+```
+

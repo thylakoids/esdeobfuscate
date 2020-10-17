@@ -35,6 +35,12 @@ window = dom.window;
 document = window.document;
 XMLHttpRequest = window.XMLHttpRequest;
 
+delete window.navigator
+window.navigator ={
+    userAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/85.0.4183.121 Safari/537.36",
+    platform: "Linux x86_64"
+};
+
 var esdeobfuscate = (function () {
     var boperators = {
         '+': function (a, b) {return a + b;},
@@ -192,6 +198,8 @@ var esdeobfuscate = (function () {
                 }
                 if(value ===  console){
                     ret.name = 'console'
+                }else if(value === window){
+                    ret.name = 'window'
                 }else{
                     if(/\[object (\w+?)\]/.test(value.toString())){
                         ret.name=/\[object (\w+?)\]/.exec(value.toString())[1]
@@ -228,7 +236,7 @@ var esdeobfuscate = (function () {
         }
         if (ast.type === 'Identifier') {
             Object.keys(scopes).map(function (k) {
-                if (ast.name in scopes[k]
+                if (Object.keys(scopes[k]).indexOf(ast.name)!==-1
                     && scopes[k][ast.name].pure) {
                     ret = {pure: true, value: scopes[k][ast.name].value, scope: scopes[k], scopevar: true, name: ast.name}
                 }
@@ -424,10 +432,15 @@ var esdeobfuscate = (function () {
                 case 'Identifier':
                     purenode = pureValue(ast)
                     if (expandvars && purenode.pure) {
-                        return mkliteral(purenode.value, ast.name);
-                    } else {
-                        return ast;
-                    }
+                        debugger
+                        if(!purenode.value || purenode.value.toString().length < 20){
+                            return mkliteral(purenode.value, ast.name);
+                        }else{
+                            ast.pure = true
+                            ast.value = purenode.value
+                        }
+                    } 
+                    return ast;
                 case 'ArrayExpression':
                     ret = {
                         type: ast.type,
@@ -486,6 +499,7 @@ var esdeobfuscate = (function () {
                     if (pureobject.pure && (ret.property.type === 'Identifier' 
                         ||( ret.property.type === 'Literal' && typeof ret.property.value === 'number'))) {
                         ret.pure = true
+                        debugger
                         ret.value = pureobject.value[ret.property.name?ret.property.name:ret.property.value]
                         if (expandvars) {
                             if(typeof ret.value === 'function'){
@@ -730,6 +744,8 @@ var esdeobfuscate = (function () {
                     return ast;
             }
         } catch (e) {
+            console.log('ast:', recast.print(ast).code)
+            console.log('ret:', recast.print(ret).code)
             debugger
             console.log(e)
             process.exit(1)
