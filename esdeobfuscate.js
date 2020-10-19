@@ -36,10 +36,30 @@ document = window.document;
 XMLHttpRequest = window.XMLHttpRequest;
 
 delete window.navigator
-window.navigator ={
+window.navigator = {
     userAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/85.0.4183.121 Safari/537.36",
     platform: "Linux x86_64"
 };
+
+window.screenTop = 40
+window.screenLeft = 0
+window.outerWidth = 1707
+window.outerHeight = 920
+window.innerWidth = 310
+window.innerHeight = 816
+Object.defineProperty(window.screen, 'width', {get: function () {return 1706}})
+Object.defineProperty(window.screen, 'height', {get: function () {return 960}})
+Object.defineProperty(window.screen, 'availHeight', {get: function () {return 920}})
+Object.defineProperty(window.screen, 'availLeft', {get: function () {return 0}})
+Object.defineProperty(window.screen, 'availTop', {get: function () {return 40}})
+Object.defineProperty(window.screen, 'availWidth', {get: function () {return 1707}})
+Object.defineProperty(window.screen, 'colorDepth', {get: function () {return 24}})
+Object.defineProperty(window.screen, 'pixelDepth', {get: function () {return 24}})
+
+Object.defineProperty(window.document.documentElement, 'clientWidth', {get: function () {return 310}})
+Object.defineProperty(window.document.documentElement, 'clientHeight', {get: function () {return 816}})
+
+window.document.hasFocus = function () {return true}
 
 var esdeobfuscate = (function () {
     var boperators = {
@@ -97,6 +117,23 @@ var esdeobfuscate = (function () {
     var updateoperator = {
         '++': a => ++a,
         '--': a => --a,
+    }
+
+    function mkupdateExp(id, value, retvalue) {
+        return {
+            pure: true,
+            value: retvalue,
+            type: 'SequenceExpression',
+            expressions: [
+                {
+                    type: 'AssignmentExpression',
+                    operator: '=',
+                    left: {type: 'Identifier', name: id},
+                    right: mkliteral(value)
+                },
+                mkliteral(retvalue)
+            ]
+        }
     }
 
     function match(o, pattern) {
@@ -196,18 +233,18 @@ var esdeobfuscate = (function () {
                     pure: true,
                     value: value
                 }
-                if(value ===  console){
+                if (value === console) {
                     ret.name = 'console'
-                }else if(value === window){
+                } else if (value === window) {
                     ret.name = 'window'
-                }else{
-                    if(/\[object (\w+?)\]/.test(value.toString())){
-                        ret.name=/\[object (\w+?)\]/.exec(value.toString())[1]
-                    }else{
+                } else {
+                    if (/\[object (\w+?)\]/.test(value.toString())) {
+                        ret.name = /\[object (\w+?)\]/.exec(value.toString())[1]
+                    } else {
                         ret.name = raw
                     }
                 }
-                if(ret.name === 'Object'){ret.name=raw}
+                if (ret.name === 'Object') {ret.name = raw}
                 return ret
             }
 
@@ -230,13 +267,13 @@ var esdeobfuscate = (function () {
         // if a node is pure, return its value. 
         // if it is a Identifier then check scope.
         var ret = {pure: false, value: undefined, scope: null, scopevar: false, name: null}
-        if (ast.pure) {
+        if (ast.pure && ast.value !== Symbol.for('nonepure')) {
             ret.pure = true;
             ret.value = ast.value;
         }
         if (ast.type === 'Identifier') {
             Object.keys(scopes).map(function (k) {
-                if (Object.keys(scopes[k]).indexOf(ast.name)!==-1
+                if (Object.keys(scopes[k]).indexOf(ast.name) !== -1
                     && scopes[k][ast.name].pure) {
                     ret = {pure: true, value: scopes[k][ast.name].value, scope: scopes[k], scopevar: true, name: ast.name}
                 }
@@ -266,7 +303,7 @@ var esdeobfuscate = (function () {
     //     "clearImmediate", "clearInterval", "clearTimeout",
     //     "setImmediate", "setInterval", "setTimeout", "atob", "btoa"
     // ];
-    const global_vars = ["window", "console", "JSON", "Date","Math",
+    const global_vars = ["window", "console", "JSON", "Date", "Math",
         "String", "Object", "Array", "Number", "Boolean", "RegExp", "Symbol",
         "eval", "isNaN", "parseInt",
         "NaN", 'undefined', 'null'
@@ -389,9 +426,9 @@ var esdeobfuscate = (function () {
                         return const_collapse_scoped(esprima.parse(ret.arguments[0].value).body[0].expression)
                     }
 
-                    if (ret.purecallee.pure && ret.purearg){
+                    if (ret.purecallee.pure && ret.purearg) {
                         //这里是不执行的函数console.log
-                        if([console.log].indexOf(ret.purecallee.value) !==-1){
+                        if ([console.log].indexOf(ret.purecallee.value) !== -1) {
                             // ret.pure = true
                             // ret.value = ret.purecallee.value.apply(ret.value,
                             //     ret.arguments.map(x => x.value))
@@ -421,6 +458,33 @@ var esdeobfuscate = (function () {
                         return mkliteral(value)
                     }
 
+                    if (ret.purecallee.pure && !ret.purearg) {
+                        if (match(ret.callee, {
+                            type: 'MemberExpression',
+                            property: {type: 'Identifier'}
+                        })) {
+                            function findcallthis(ast) {
+                                if (ast.callee && ast.callee.object && match(ast.callee.object, {
+                                    type: 'CallExpression',
+                                    callee: {type: 'MemberExpression'}
+                                })) {
+                                    return findcallthis(ast.callee.object)
+                                } else {
+                                    return ast.callee.object ? ast.callee.object : ast
+                                }
+                            }
+                            let callthis = findcallthis(ast)
+                            purenode = pureValue(callthis)
+                            if (purenode.scopevar) {
+                                purenode.scope[purenode.name].pure = false
+                                purenode.scope[purenode.name].value = undefined
+                            }
+                            debugger
+                            // 这里有可能让object的pure变成false.
+                            // pureobject = pureValue(ret.callee.object)
+                            // pureobject.value = Symbol.for('nonepure')
+                        }
+                    }
                     //?
                     if (ret.callee.body && ret.callee.body.pure) {
                         return mkliteral(ret.callee.body.value);
@@ -432,14 +496,13 @@ var esdeobfuscate = (function () {
                 case 'Identifier':
                     purenode = pureValue(ast)
                     if (expandvars && purenode.pure) {
-                        debugger
-                        if(!purenode.value || purenode.value.toString().length < 20){
+                        if (!purenode.value || purenode.value.toString().length < 20) {
                             return mkliteral(purenode.value, ast.name);
-                        }else{
+                        } else {
                             ast.pure = true
                             ast.value = purenode.value
                         }
-                    } 
+                    }
                     return ast;
                 case 'ArrayExpression':
                     ret = {
@@ -452,7 +515,7 @@ var esdeobfuscate = (function () {
                     }
                     return ret;
                 case 'ObjectExpression':
-                    ret =  {
+                    ret = {
                         type: ast.type,
                         properties: ast.properties.map(function (p) {
                             return {
@@ -462,14 +525,14 @@ var esdeobfuscate = (function () {
                             };
                         })
                     };
-                    if(ret.properties.every(x => x.value.pure)){
+                    if (ret.properties.every(x => x.value.pure)) {
                         ret.pure = true
-                        if(ret.properties.length){
+                        if (ret.properties.length) {
                             ret.value = {}
-                            ret.properties.map(function(p){
-                                ret.value[p.key.name]=p.value.value
+                            ret.properties.map(function (p) {
+                                ret.value[p.key.name] = p.value.value
                             })
-                        }else{
+                        } else {
                             ret.value = {}
                         }
                     }
@@ -496,18 +559,19 @@ var esdeobfuscate = (function () {
                     pureobject = pureValue(ret.object)
                     // a.property
                     // a[1]
-                    if (pureobject.pure && (ret.property.type === 'Identifier' 
-                        ||( ret.property.type === 'Literal' && typeof ret.property.value === 'number'))) {
+                    if (pureobject.pure && (ret.property.type === 'Identifier'
+                        || (ret.property.type === 'Literal' && typeof ret.property.value === 'number'))) {
                         ret.pure = true
-                        debugger
-                        ret.value = pureobject.value[ret.property.name?ret.property.name:ret.property.value]
+                        ret.value = pureobject.value[ret.property.name ? ret.property.name : ret.property.value]
                         if (expandvars) {
-                            if(typeof ret.value === 'function'){
-                                if(global_vars.indexOf(ret.value.name)!==-1){
-                                    return mkliteral(ret.value) 
+                            if (typeof ret.value === 'function') {
+                                if (global_vars.indexOf(ret.value.name) !== -1) {
+                                    // return mkliteral(ret.value) 
+                                    return ret
                                 }
-                            }else{
-                                return mkliteral(ret.value)
+                            } else {
+                                // return mkliteral(ret.value)
+                                return ret
                             }
                         }
                     }
@@ -680,8 +744,8 @@ var esdeobfuscate = (function () {
                     ret.purecallee = pureValue(ret.callee);
                     if (ret.purecallee.pure && ret.purearg) {
                         ret.pure = true
-                        ret.value = new (Function.prototype.bind.apply(ret.callee.value, 
-                            [null].concat(ret.arguments.map(x=>x.value)) ))
+                        ret.value = new (Function.prototype.bind.apply(ret.callee.value,
+                            [null].concat(ret.arguments.map(x => x.value))))
                     }
                     return ret
                 case 'SequenceExpression':
@@ -699,19 +763,18 @@ var esdeobfuscate = (function () {
                         argument: const_collapse(ast.argument, scope, false),
                         prefix: ast.prefix
                     };
-                    if (ret.argument.type == 'Identifier' && ret.argument.name in scope && scope[ret.argument.name].pure) {
-                        svalue = scope[ret.argument.name].value
+                    ret.purearg = pureValue(ret.argument)
+                    if (ret.argument.type == 'Identifier' && ret.purearg.pure) {
+                        svalue = ret.purearg.value
                         value = updateoperator[ast.operator](svalue)
-                        scope[ret.argument.name] = {
-                            value: value,
-                            pure: true
-                        };
+                        ret.purearg.scope[ret.purearg.name].value = value
                         ret.pure = true
                         if (ret.prefix) {
                             ret.value = value
                         } else {
                             ret.value = svalue
                         }
+                        return mkupdateExp(ret.purearg.name, value, ret.value)
                     }
                     return ret
                 case 'TryStatement':
