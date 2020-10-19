@@ -377,6 +377,8 @@ var esdeobfuscate = (function () {
                         if (ret.right.pure && (ast.operator === '=' || (ret.left.name in scope && scope[ret.left.name].pure))) {
                             ret.value = aoperators[ast.operator]((ret.left.name in scope) && scope[ret.left.name].value, ret.right.value)
                             ret.pure = true
+                            ret.operator = '='
+                            ret.right = mkliteral(ret.value)
                             scope[ret.left.name] = {
                                 value: ret.value,
                                 pure: true
@@ -390,6 +392,7 @@ var esdeobfuscate = (function () {
                     }
                     //a[10] = 10
                     //a.b = 10
+                    //todo: a[10]+=2
                     if (match(ret.left, {
                         type: 'MemberExpression',
                         object: {type: 'Identifier'}
