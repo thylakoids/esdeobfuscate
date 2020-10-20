@@ -228,6 +228,7 @@ var esdeobfuscate = (function () {
             }
             if (typeof value === 'object') {
                 //todo
+                debugger
                 ret = {
                     type: 'Identifier',
                     pure: true,
@@ -241,10 +242,10 @@ var esdeobfuscate = (function () {
                     if (/\[object (\w+?)\]/.test(value.toString())) {
                         ret.name = /\[object (\w+?)\]/.exec(value.toString())[1]
                     } else {
-                        ret.name = raw
+                        ret.name = raw ? raw : '$object'
                     }
                 }
-                if (ret.name === 'Object') {ret.name = raw}
+                if (ret.name === 'Object') {ret.name = raw ? raw : '$object'}
                 return ret
             }
 
@@ -304,7 +305,7 @@ var esdeobfuscate = (function () {
     //     "setImmediate", "setInterval", "setTimeout", "atob", "btoa"
     // ];
     const global_vars = ["window", "console", "JSON", "Date", "Math",
-        "String", "Object", "Array", "Number", "Boolean", "RegExp", "Symbol",
+        "String", "Object", "Array", "Number", "Boolean", "RegExp", "Symbol",'Function',
         "eval", "isNaN", "parseInt",
         "NaN", 'undefined', 'null'
     ]
@@ -432,7 +433,7 @@ var esdeobfuscate = (function () {
                     }) && match(ret.arguments[0], {
                         type: 'Literal'
                     })) {
-                        if(ret.arguments[0].value === ""){return mkliteral(undefined)}
+                        if (ret.arguments[0].value === "") {return mkliteral(undefined)}
                         return const_collapse_scoped(esprima.parse(ret.arguments[0].value).body[0].expression)
                     }
 
@@ -581,6 +582,7 @@ var esdeobfuscate = (function () {
                     // a[[]]
                     if (pureobject.pure) {
                         ret.pure = true
+                        debugger
                         ret.value = pureobject.value[ret.property.name ? ret.property.name : ret.property.value]
                         if (expandvars) {
                             if (typeof ret.value === 'function') {
