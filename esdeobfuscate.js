@@ -377,8 +377,10 @@ var esdeobfuscate = (function () {
                         if (ret.right.pure && (ast.operator === '=' || (ret.left.name in scope && scope[ret.left.name].pure))) {
                             ret.value = aoperators[ast.operator]((ret.left.name in scope) && scope[ret.left.name].value, ret.right.value)
                             ret.pure = true
-                            ret.operator = '='
-                            ret.right = mkliteral(ret.value)
+                            if (!ret.value || ret.value.toString().length < 100) {
+                                ret.operator = '='
+                                ret.right = mkliteral(ret.value)
+                            }
                             scope[ret.left.name] = {
                                 value: ret.value,
                                 pure: true
@@ -409,6 +411,7 @@ var esdeobfuscate = (function () {
                     }
                     return ret;
                 case 'CallExpression':
+                    // 不展开函数
                     ret = {
                         type: 'CallExpression',
                         callee: const_collapse_scoped(ast.callee),
@@ -432,9 +435,6 @@ var esdeobfuscate = (function () {
                     if (ret.purecallee.pure && ret.purearg) {
                         //这里是不执行的函数console.log
                         if ([console.log].indexOf(ret.purecallee.value) !== -1) {
-                            // ret.pure = true
-                            // ret.value = ret.purecallee.value.apply(ret.value,
-                            //     ret.arguments.map(x => x.value))
                             return ret
                         }
 
@@ -450,15 +450,26 @@ var esdeobfuscate = (function () {
                                 pureobject.value,
                                 ret.arguments.map(x => x.value)
                             )
-                            return mkliteral(value)
+                            ret.value = value
+                            ret.pure = true
+                            return ret
                         }
 
                         //default
                         //? 函数会改变参数的值的情况怎么处理
-                        value = ret.purecallee.value.apply(ret.value,
-                            ret.arguments.map(x => x.value)
-                        )
-                        return mkliteral(value)
+                        try {
+                            value = ret.purecallee.value.apply(ret.value,
+                                ret.arguments.map(x => x.value)
+                            )
+                            ret.value = value
+                            ret.pure = true
+                            return ret
+                        } catch (e) {
+                            console.log('ast:', recast.print(ast).code)
+                            console.log('ret:', recast.print(ret).code)
+                            console.log('error when try to execute function', e.message)
+                            return ret
+                        }
                     }
 
                     if (ret.purecallee.pure && !ret.purearg) {
@@ -499,7 +510,7 @@ var esdeobfuscate = (function () {
                 case 'Identifier':
                     purenode = pureValue(ast)
                     if (expandvars && purenode.pure) {
-                        if (!purenode.value || purenode.value.toString().length < 20) {
+                        if (!purenode.value || purenode.value.toString().length < 100) {
                             return mkliteral(purenode.value, ast.name);
                         } else {
                             ast.pure = true
@@ -562,14 +573,14 @@ var esdeobfuscate = (function () {
                     pureobject = pureValue(ret.object)
                     // a.property
                     // a[1]
-                    if (pureobject.pure && (ret.property.type === 'Identifier'
-                        || (ret.property.type === 'Literal' && typeof ret.property.value === 'number'))) {
+                    // a[[]]
+                    if (pureobject.pure) {
                         ret.pure = true
                         ret.value = pureobject.value[ret.property.name ? ret.property.name : ret.property.value]
                         if (expandvars) {
                             if (typeof ret.value === 'function') {
                                 if (global_vars.indexOf(ret.value.name) !== -1) {
-                                    // return mkliteral(ret.value) 
+                                    // return mkliteral(ret.value)
                                     return ret
                                 }
                             } else {
@@ -626,6 +637,7 @@ var esdeobfuscate = (function () {
                         expression: ast.expression
                     };
                 case 'FunctionExpression':
+                    debugger
                     fscope = Object.create(scope);
                     ast.params.map(function (p) {
                         fscope[p.name] = {value: undefined, pure: false};
