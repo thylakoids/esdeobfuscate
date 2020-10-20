@@ -432,6 +432,7 @@ var esdeobfuscate = (function () {
                     }) && match(ret.arguments[0], {
                         type: 'Literal'
                     })) {
+                        if(ret.arguments[0].value === ""){return mkliteral(undefined)}
                         return const_collapse_scoped(esprima.parse(ret.arguments[0].value).body[0].expression)
                     }
 
