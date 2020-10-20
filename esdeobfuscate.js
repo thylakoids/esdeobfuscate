@@ -210,7 +210,7 @@ var esdeobfuscate = (function () {
             if (typeof value === 'function') {
                 return {
                     type: 'Identifier',
-                    name: value.name,
+                    name: value.name === 'anonymous' ? `(${value.toString()})` : value.name,
                     pure: true,
                     value: value
                 }
@@ -400,7 +400,11 @@ var esdeobfuscate = (function () {
                         object: {type: 'Identifier'}
                     })) {
                         pureobject = pureValue(ret.left.object)
-                        pureproperty = pureValue(ret.left.property)
+                        if (ret.left.computed) {
+                            pureproperty = pureValue(ret.left.property)
+                        } else {
+                            pureproperty = {pure: true, value: ret.left.property.name}
+                        }
                         if (pureobject.pure && pureproperty.pure && typeof pureobject.value === 'object') {
                             if (ret.right.pure && (ast.operator === '=' || (ret.left.name in scope && scope[ret.left.name].pure))) {
                                 ret.value = aoperators[ast.operator]((ret.left.name in scope) && scope[ret.left.name].value, ret.right.value)
@@ -411,7 +415,6 @@ var esdeobfuscate = (function () {
                     }
                     return ret;
                 case 'CallExpression':
-                    // 不展开函数
                     ret = {
                         type: 'CallExpression',
                         callee: const_collapse_scoped(ast.callee),
@@ -452,7 +455,8 @@ var esdeobfuscate = (function () {
                             )
                             ret.value = value
                             ret.pure = true
-                            return ret
+                            console.log(value.toString())
+                            return mkliteral(value)
                         }
 
                         //default
@@ -463,7 +467,7 @@ var esdeobfuscate = (function () {
                             )
                             ret.value = value
                             ret.pure = true
-                            return ret
+                            return mkliteral(value)
                         } catch (e) {
                             console.log('ast:', recast.print(ast).code)
                             console.log('ret:', recast.print(ret).code)
