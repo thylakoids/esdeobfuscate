@@ -785,7 +785,7 @@ var esdeobfuscate = (function () {
                     };
                     ret.purearg = pureValue(ret.argument)
                     if (ret.argument.type == 'Identifier' && ret.purearg.pure) {
-                        svalue = ret.purearg.value
+                        svalue = +ret.purearg.value
                         value = updateoperator[ast.operator](svalue)
                         ret.purearg.scope[ret.purearg.name].value = value
                         ret.pure = true
