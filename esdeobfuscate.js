@@ -230,7 +230,6 @@ var esdeobfuscate = (function () {
             }
             if (typeof value === 'object') {
                 //todo
-                debugger
                 ret = {
                     type: 'Identifier',
                     pure: true,
@@ -478,7 +477,6 @@ var esdeobfuscate = (function () {
                             )
                             ret.value = value
                             ret.pure = true
-                            console.log(value.toString())
                             return mkliteral(value)
                         }
 
@@ -520,7 +518,6 @@ var esdeobfuscate = (function () {
                                 purenode.scope[purenode.name].pure = false
                                 purenode.scope[purenode.name].value = undefined
                             }
-                            debugger
                             // 这里有可能让object的pure变成false.
                             // pureobject = pureValue(ret.callee.object)
                             // pureobject.value = Symbol.for('nonepure')
@@ -607,7 +604,6 @@ var esdeobfuscate = (function () {
                     // a[[]]
                     if (pureobject.pure) {
                         ret.pure = true
-                        debugger
                         ret.value = pureobject.value[ret.property.name ? ret.property.name : ret.property.value]
                         if (expandvars) {
                             if (typeof ret.value === 'function') {
@@ -669,7 +665,6 @@ var esdeobfuscate = (function () {
                         expression: ast.expression
                     };
                 case 'FunctionExpression':
-                    debugger
                     fscope = Object.create(scope);
                     ast.params.map(function (p) {
                         fscope[p.name] = {value: undefined, pure: false};
@@ -854,6 +849,7 @@ var esdeobfuscate = (function () {
                     return ast;
             }
         } catch (e) {
+            console.log('start:', ast.loc.start)
             console.log('ast:', recast.print(ast).code)
             console.log('ret:', recast.print(ret).code)
             debugger

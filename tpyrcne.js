@@ -5,9 +5,9 @@ var debug = require('util').debuglog(DEBUGNAME);
 
 // const escope = require('escope')
 const esprima = require("esprima");
+const recast = require('recast')
 const esmangle = require("esmangle");
 const escodegen = require("escodegen");
-const recast = require('recast')
 const fs = require('fs')
 const esdeobfuscate = require('./esdeobfuscate.js')
 
@@ -32,9 +32,7 @@ var code = function () {
     }
 }()
 
-// var scopeManager = escope.analyze(ast);
-// var currrentScope = scopeManager.acquire(ast);
-var ast = esprima.parse(code)
+var ast = esprima.parse(code, {loc:true})
 try {
     ast = esdeobfuscate.deobfuscate(ast, {'U6F':{pure:true,value:
 (function anonymous(
