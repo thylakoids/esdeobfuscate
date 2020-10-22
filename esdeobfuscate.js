@@ -25,41 +25,41 @@
 var DEBUGNAME = __filename.slice(__dirname.length + 1, -3);
 var debug = require('util').debuglog(DEBUGNAME);
 
-esprima = require('esprima')
-recast = require('recast')
+const esprima = require('esprima')
+const recast = require('recast')
 
-const jsdom = require("jsdom");
-const {JSDOM} = jsdom;
-const dom = new JSDOM(`<!DOCTYPE html><p>Hello world</p>`);
-window = dom.window;
-document = window.document;
-XMLHttpRequest = window.XMLHttpRequest;
+// const jsdom = require("jsdom");
+// const {JSDOM} = jsdom;
+// const dom = new JSDOM(`<!DOCTYPE html><p>Hello world</p>`);
+// window = dom.window;
+// document = window.document;
+// XMLHttpRequest = window.XMLHttpRequest;
 
-delete window.navigator
-window.navigator = {
-    userAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/85.0.4183.121 Safari/537.36",
-    platform: "Linux x86_64"
-};
+// delete window.navigator
+// window.navigator = {
+//     userAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/85.0.4183.121 Safari/537.36",
+//     platform: "Linux x86_64"
+// };
 
-window.screenTop = 40
-window.screenLeft = 0
-window.outerWidth = 1707
-window.outerHeight = 920
-window.innerWidth = 310
-window.innerHeight = 816
-Object.defineProperty(window.screen, 'width', {get: function () {return 1706}})
-Object.defineProperty(window.screen, 'height', {get: function () {return 960}})
-Object.defineProperty(window.screen, 'availHeight', {get: function () {return 920}})
-Object.defineProperty(window.screen, 'availLeft', {get: function () {return 0}})
-Object.defineProperty(window.screen, 'availTop', {get: function () {return 40}})
-Object.defineProperty(window.screen, 'availWidth', {get: function () {return 1707}})
-Object.defineProperty(window.screen, 'colorDepth', {get: function () {return 24}})
-Object.defineProperty(window.screen, 'pixelDepth', {get: function () {return 24}})
+// window.screenTop = 40
+// window.screenLeft = 0
+// window.outerWidth = 1707
+// window.outerHeight = 920
+// window.innerWidth = 310
+// window.innerHeight = 816
+// Object.defineProperty(window.screen, 'width', {get: function () {return 1706}})
+// Object.defineProperty(window.screen, 'height', {get: function () {return 960}})
+// Object.defineProperty(window.screen, 'availHeight', {get: function () {return 920}})
+// Object.defineProperty(window.screen, 'availLeft', {get: function () {return 0}})
+// Object.defineProperty(window.screen, 'availTop', {get: function () {return 40}})
+// Object.defineProperty(window.screen, 'availWidth', {get: function () {return 1707}})
+// Object.defineProperty(window.screen, 'colorDepth', {get: function () {return 24}})
+// Object.defineProperty(window.screen, 'pixelDepth', {get: function () {return 24}})
 
-Object.defineProperty(window.document.documentElement, 'clientWidth', {get: function () {return 310}})
-Object.defineProperty(window.document.documentElement, 'clientHeight', {get: function () {return 816}})
+// Object.defineProperty(window.document.documentElement, 'clientWidth', {get: function () {return 310}})
+// Object.defineProperty(window.document.documentElement, 'clientHeight', {get: function () {return 816}})
 
-window.document.hasFocus = function () {return true}
+// window.document.hasFocus = function () {return true}
 
 var esdeobfuscate = (function () {
     var boperators = {
@@ -67,6 +67,7 @@ var esdeobfuscate = (function () {
         '-': function (a, b) {return a - b;},
         '*': function (a, b) {return a * b;},
         '/': function (a, b) {return a / b;},
+        '**': function (a, b) {return a ** b;},
         '%': function (a, b) {return a % b;},
 
         '<<': function (a, b) {return a << b;},
@@ -97,6 +98,7 @@ var esdeobfuscate = (function () {
         '+': function (a) {return +a;},
         '-': function (a) {return -a;},
         'void': function (a) {return void a;},
+        'delete': function (a) {return delete a;},
         'typeof': function (a) {return typeof a;}
     };
     var aoperators = {
@@ -274,9 +276,15 @@ var esdeobfuscate = (function () {
         }
         if (ast.type === 'Identifier') {
             Object.keys(scopes).map(function (k) {
-                if (Object.keys(scopes[k]).indexOf(ast.name) !== -1
-                    && scopes[k][ast.name].pure) {
-                    ret = {pure: true, value: scopes[k][ast.name].value, scope: scopes[k], scopevar: true, name: ast.name}
+                if (Object.keys(scopes[k]).indexOf(ast.name) !== -1) {
+                    ret = {
+                        pure: scopes[k][ast.name].pure,
+                        value: scopes[k][ast.name].value,
+                        scope: scopes[k],
+                        scopevar: true,
+                        name: ast.name,
+                        astvalue: scopes[k][ast.name].astvalue
+                    }
                 }
             })
         }
@@ -304,8 +312,8 @@ var esdeobfuscate = (function () {
     //     "clearImmediate", "clearInterval", "clearTimeout",
     //     "setImmediate", "setInterval", "setTimeout", "atob", "btoa"
     // ];
-    const global_vars = ["window", "console", "JSON", "Date", "Math",
-        "String", "Object", "Array", "Number", "Boolean", "RegExp", "Symbol",'Function',
+    const global_vars = ["console", "JSON", "Date", "Math",
+        "String", "Object", "Array", "Number", "Boolean", "RegExp", "Symbol", 'Function',
         "eval", "isNaN", "parseInt",
         "NaN", 'undefined', 'null'
     ]
@@ -372,11 +380,23 @@ var esdeobfuscate = (function () {
                         left: const_collapse(ast.left, scope, false),
                         right: const_collapse_scoped(ast.right)
                     };
+                    // a+=b ---- a=a+b
+                    // ? 有什么情况会出错吗？
+                    if (ret.operator !== '=' && Object.keys(aoperators).indexOf(ret.operator) !== -1) {
+                        ret.right = const_collapse_scoped({
+                            type: 'BinaryExpression',
+                            operator: ret.operator.split('=')[0],
+                            left: ret.left,
+                            right: ret.right
+                        })
+                        ret.operator = '=';
+                    }
+
                     if (ret.left.type === 'Identifier') {
                         // '=': add left to scope
                         // '+=,-=,...' and right is in scope: update scope
-                        if (ret.right.pure && (ast.operator === '=' || (ret.left.name in scope && scope[ret.left.name].pure))) {
-                            ret.value = aoperators[ast.operator]((ret.left.name in scope) && scope[ret.left.name].value, ret.right.value)
+                        if (ret.right.pure) {
+                            ret.value = ret.right.value
                             ret.pure = true
                             if (!ret.value || ret.value.toString().length < 100) {
                                 ret.operator = '='
@@ -388,14 +408,15 @@ var esdeobfuscate = (function () {
                             }
                         } else {
                             scope[ret.left.name] = {
+                                pure: false,
                                 value: undefined,
-                                pure: false
+                                astvalue: ret.right
                             }
                         }
                     }
                     //a[10] = 10
                     //a.b = 10
-                    //todo: a[10]+=2
+                    //todo: nonepure
                     if (match(ret.left, {
                         type: 'MemberExpression',
                         object: {type: 'Identifier'}
@@ -407,8 +428,8 @@ var esdeobfuscate = (function () {
                             pureproperty = {pure: true, value: ret.left.property.name}
                         }
                         if (pureobject.pure && pureproperty.pure && typeof pureobject.value === 'object') {
-                            if (ret.right.pure && (ast.operator === '=' || (ret.left.name in scope && scope[ret.left.name].pure))) {
-                                ret.value = aoperators[ast.operator]((ret.left.name in scope) && scope[ret.left.name].value, ret.right.value)
+                            if (ret.right.pure) {
+                                ret.value = ret.right.value
                                 ret.pure = true
                                 pureobject.value[pureproperty.value] = ret.value
                             }
@@ -521,7 +542,11 @@ var esdeobfuscate = (function () {
                         } else {
                             ast.pure = true
                             ast.value = purenode.value
+                            return ast
                         }
+                    }
+                    if (expandvars && purenode.astvalue) {
+                        return purenode.astvalue
                     }
                     return ast;
                 case 'ArrayExpression':
