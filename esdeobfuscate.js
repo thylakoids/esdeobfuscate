@@ -554,7 +554,7 @@ var esdeobfuscate = (function () {
                         elements: ast.elements.map(const_collapse_scoped)
                     };
                     ret.pure = ret.elements.every(x => x.pure)
-                    ret.value = ret.elements.length ? ret.elements.map(x => x.value ? x.value : ast2Symbol(x)) : []
+                    ret.value = ret.elements.length ? ret.elements.map(x => x.pure ? x.value : x.value ? x.value : ast2Symbol(x)) : []
                     return ret;
                 case 'ObjectExpression':
                     ret = {
@@ -571,7 +571,7 @@ var esdeobfuscate = (function () {
                     ret.value = {}
                     if (ret.properties.length) {
                         ret.properties.map(function (p) {
-                            ret.value[p.key.name] = p.value.value ? p.value.value : ast2Symbol(p.value)
+                            ret.value[p.key.name] = p.value.pure ? p.value.value : p.value.value ? p.value.value : ast2Symbol(p.value)
                         })
                     }
                     return ret
