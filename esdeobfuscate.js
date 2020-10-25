@@ -121,6 +121,36 @@ var esdeobfuscate = (function () {
         '--': a => --a,
     }
 
+    function isSymbol(value) {
+        if (typeof value === 'symbol' && /^@#nonepure\./.test(value.description)) {
+            return true
+        } else {
+            return false
+        }
+    }
+
+    function Symbol2ast(s) {
+        s = /^@#nonepure\.(.*)$/.exec(s.description)[1]
+        if (s) {
+            return esprima.parse(s).body[0].expression
+        }
+    }
+    function ast2Symbol(ast) {
+        return Symbol('@#nonepure.' + recast.print(ast).code)
+    }
+
+    function expandast(ast) {
+        if (ast.pure) {
+            if (!ast.value || ast.value.toString().length < 100) {
+                return mkliteral(ast.value);
+            }
+        }
+        if (isSymbol(ast.value)) {
+            return Symbol2ast(ast.value)
+        }
+        return ast
+    }
+
     function mkupdateExp(id, value, retvalue) {
         return {
             pure: true,
@@ -237,8 +267,6 @@ var esdeobfuscate = (function () {
                 }
                 if (value === console) {
                     ret.name = 'console'
-                } else if (value === window) {
-                    ret.name = 'window'
                 } else {
                     if (/\[object (\w+?)\]/.test(value.toString())) {
                         ret.name = /\[object (\w+?)\]/.exec(value.toString())[1]
@@ -246,7 +274,7 @@ var esdeobfuscate = (function () {
                         ret.name = raw ? raw : '$object'
                     }
                 }
-                if (ret.name === 'Object') {ret.name = raw ? raw : '$object'}
+                if (ret.name === 'Object') {ret.name = raw ? raw : JSON.stringify(value)}
                 return ret
             }
 
@@ -269,10 +297,8 @@ var esdeobfuscate = (function () {
         // if a node is pure, return its value. 
         // if it is a Identifier then check scope.
         var ret = {pure: false, value: undefined, scope: null, scopevar: false, name: null}
-        if (ast.pure && ast.value !== Symbol.for('nonepure')) {
-            ret.pure = true;
-            ret.value = ast.value;
-        }
+        ret.value = ast.value
+        ret.pure = ast.pure ? true : false
         if (ast.type === 'Identifier') {
             Object.keys(scopes).map(function (k) {
                 if (Object.keys(scopes[k]).indexOf(ast.name) !== -1) {
@@ -282,7 +308,6 @@ var esdeobfuscate = (function () {
                         scope: scopes[k],
                         scopevar: true,
                         name: ast.name,
-                        astvalue: scopes[k][ast.name].astvalue
                     }
                 }
             })
@@ -335,18 +360,20 @@ var esdeobfuscate = (function () {
             switch (ast.type) {
                 case 'LogicalExpression':
                 case 'BinaryExpression':
-                    left = const_collapse_scoped(ast.left);
-                    right = const_collapse_scoped(ast.right);
-                    if (left.pure && right.pure && ast.operator in boperators) {
-                        return mkliteral(boperators[ast.operator](left.value, right.value));
-                    } else {
-                        return {
-                            type: ast.type,
-                            operator: ast.operator,
-                            left: left,
-                            right: right
-                        };
+                    ret = {
+                        left: const_collapse_scoped(ast.left),
+                        right: const_collapse_scoped(ast.right),
+                        type: ast.type,
+                        operator: ast.operator
                     }
+                    if (ret.left.pure && ret.right.pure && ret.operator in boperators) {
+                        ret.value = boperators[ret.operator](ret.left.value, ret.right.value);
+                        ret.pure = true;
+                    } else {
+                        ret.pure = false;
+                    }
+                    debugger
+                    return expandvars ? expandast(ret) : ret
                 case 'UnaryExpression':
                     arg = const_collapse_scoped(ast.argument);
                     if (arg.pure && ast.operator in uoperators) {
@@ -394,28 +421,15 @@ var esdeobfuscate = (function () {
                     if (ret.left.type === 'Identifier') {
                         // '=': add left to scope
                         // '+=,-=,...' and right is in scope: update scope
-                        if (ret.right.pure) {
-                            ret.value = ret.right.value
-                            ret.pure = true
-                            if (!ret.value || ret.value.toString().length < 100) {
-                                ret.operator = '='
-                                ret.right = mkliteral(ret.value)
-                            }
-                            scope[ret.left.name] = {
-                                value: ret.value,
-                                pure: true
-                            }
-                        } else {
-                            scope[ret.left.name] = {
-                                pure: false,
-                                value: undefined,
-                                astvalue: ret.right
-                            }
+                        ret.pure = ret.right.pure
+                        ret.value = ret.pure ? ret.right.value : ret.right.value ? ret.right.value : ast2Symbol(ret.right)
+                        scope[ret.left.name] = {
+                            value: ret.value,
+                            pure: ret.pure,
                         }
                     }
                     //a[10] = 10
                     //a.b = 10
-                    //todo: nonepure
                     if (match(ret.left, {
                         type: 'MemberExpression',
                         object: {type: 'Identifier'}
@@ -426,12 +440,10 @@ var esdeobfuscate = (function () {
                         } else {
                             pureproperty = {pure: true, value: ret.left.property.name}
                         }
-                        if (pureobject.pure && pureproperty.pure && typeof pureobject.value === 'object') {
-                            if (ret.right.pure) {
-                                ret.value = ret.right.value
-                                ret.pure = true
-                                pureobject.value[pureproperty.value] = ret.value
-                            }
+                        if (pureobject.value && pureproperty.pure && typeof pureobject.value === 'object') {
+                            ret.value = ret.right.value
+                            ret.pure = ret.right.pure
+                            pureobject.value[pureproperty.value] = ret.value
                         }
                     }
                     return ret;
@@ -533,28 +545,16 @@ var esdeobfuscate = (function () {
                     return mkliteral(ast.value, ast.raw);
                 case 'Identifier':
                     purenode = pureValue(ast)
-                    if (expandvars && purenode.pure) {
-                        if (!purenode.value || purenode.value.toString().length < 100) {
-                            return mkliteral(purenode.value, ast.name);
-                        } else {
-                            ast.pure = true
-                            ast.value = purenode.value
-                            return ast
-                        }
-                    }
-                    if (expandvars && purenode.astvalue) {
-                        return purenode.astvalue
-                    }
-                    return ast;
+                    ast.pure = purenode.pure
+                    ast.value = purenode.scopevar ? purenode.value : ast2Symbol(ast)
+                    return expandvars ? expandast(ast) : ast
                 case 'ArrayExpression':
                     ret = {
                         type: ast.type,
                         elements: ast.elements.map(const_collapse_scoped)
                     };
-                    if (ret.elements.every(x => x.pure)) {
-                        ret.pure = true
-                        ret.value = ret.elements.length ? ret.elements.map(x => x.value) : []
-                    }
+                    ret.pure = ret.elements.every(x => x.pure)
+                    ret.value = ret.elements.length ? ret.elements.map(x => x.value ? x.value : ast2Symbol(x)) : []
                     return ret;
                 case 'ObjectExpression':
                     ret = {
@@ -567,16 +567,12 @@ var esdeobfuscate = (function () {
                             };
                         })
                     };
-                    if (ret.properties.every(x => x.value.pure)) {
-                        ret.pure = true
-                        if (ret.properties.length) {
-                            ret.value = {}
-                            ret.properties.map(function (p) {
-                                ret.value[p.key.name] = p.value.value
-                            })
-                        } else {
-                            ret.value = {}
-                        }
+                    ret.pure = ret.properties.every(x => x.value.pure)
+                    ret.value = {}
+                    if (ret.properties.length) {
+                        ret.properties.map(function (p) {
+                            ret.value[p.key.name] = p.value.value ? p.value.value : ast2Symbol(p.value)
+                        })
                     }
                     return ret
 
@@ -602,20 +598,9 @@ var esdeobfuscate = (function () {
                     // a.property
                     // a[1]
                     // a[[]]
-                    if (pureobject.pure) {
-                        ret.pure = true
-                        ret.value = pureobject.value[ret.property.name ? ret.property.name : ret.property.value]
-                        if (expandvars) {
-                            if (typeof ret.value === 'function') {
-                                if (global_vars.indexOf(ret.value.name) !== -1) {
-                                    // return mkliteral(ret.value)
-                                    return ret
-                                }
-                            } else {
-                                // return mkliteral(ret.value)
-                                return ret
-                            }
-                        }
+                    if (pureobject.value) {
+                        ret.value = isSymbol(pureobject.value) ? ast2Symbol(ret) : pureobject.value[ret.property.name ? ret.property.name : ret.property.value]
+                        ret.pure = isSymbol(ret.value) ? false : true
                     }
 
                     return ret;
