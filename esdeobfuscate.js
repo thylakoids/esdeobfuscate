@@ -372,7 +372,6 @@ var esdeobfuscate = (function () {
                     } else {
                         ret.pure = false;
                     }
-                    debugger
                     return expandvars ? expandast(ret) : ret
                 case 'UnaryExpression':
                     arg = const_collapse_scoped(ast.argument);
@@ -577,6 +576,7 @@ var esdeobfuscate = (function () {
                     return ret
 
                 case 'MemberExpression':
+                    debugger
                     ret = {
                         type: ast.type,
                         computed: ast.computed,
@@ -587,7 +587,7 @@ var esdeobfuscate = (function () {
                             : const_collapse(ast.property, scope, false)
                     }
                     // replace ['property'] with .property accessor
-                    if (ret.property.pure && /^[a-z_$][a-z_$0-9]*$/i.test('' + ret.property.value)) {
+                    if (ret.computed && ret.property.pure && /^[a-z_$][a-z_$0-9]*$/i.test('' + ret.property.value)) {
                         ret.computed = false;
                         ret.property = {
                             type: 'Identifier',
@@ -602,8 +602,9 @@ var esdeobfuscate = (function () {
                         ret.value = isSymbol(pureobject.value) ? ast2Symbol(ret) : pureobject.value[ret.property.name ? ret.property.name : ret.property.value]
                         ret.pure = isSymbol(ret.value) ? false : true
                     }
-
-                    return ret;
+                    console.log(recast.print(ast).code)
+                    if(ret.value === undefined){debugger}
+                    return expandvars ? expandast(ret) : ret
                 case 'VariableDeclaration':
                     ret = {
                         type: ast.type,
