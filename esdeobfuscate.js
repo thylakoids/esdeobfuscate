@@ -576,7 +576,6 @@ var esdeobfuscate = (function () {
                     return ret
 
                 case 'MemberExpression':
-                    debugger
                     ret = {
                         type: ast.type,
                         computed: ast.computed,
@@ -602,9 +601,11 @@ var esdeobfuscate = (function () {
                         ret.value = isSymbol(pureobject.value) ? ast2Symbol(ret) : pureobject.value[ret.property.name ? ret.property.name : ret.property.value]
                         ret.pure = isSymbol(ret.value) ? false : true
                     }
-                    console.log(recast.print(ast).code)
-                    if(ret.value === undefined){debugger}
-                    return expandvars ? expandast(ret) : ret
+                    if(ret.property.name === 'length'&&expandvars){
+                        return expandast(ret)
+                    }
+                    // 一般不要展开, 如console.log
+                    return ret
                 case 'VariableDeclaration':
                     ret = {
                         type: ast.type,
@@ -645,7 +646,7 @@ var esdeobfuscate = (function () {
                         type: ast.type,
                         id: ast.id,
                         params: ast.params,
-                        body: const_collapse(ast.body, fscope, false),
+                        body: const_collapse(ast.body, fscope, true),
                         test: ast.test,
                         generator: ast.generator,
                         expression: ast.expression
@@ -663,7 +664,7 @@ var esdeobfuscate = (function () {
                         id: ast.id,
                         params: ast.params,
                         defaults: ast.defaults,
-                        body: const_collapse(ast.body, fscope, false),
+                        body: const_collapse(ast.body, fscope, true),
                         test: ast.test,
                         generator: ast.generator,
                         expression: ast.expression
@@ -809,8 +810,8 @@ var esdeobfuscate = (function () {
                     return {
                         type: ast.type,
                         block: const_collapse_scoped(ast.block),
-                        guardedHandlers: ast.guardedHandlers.map(const_collapse_scoped),
-                        handlers: ast.handlers.map(const_collapse_scoped),
+                        // guardedHandlers: ast.guardedHandlers.map(const_collapse_scoped),
+                        handler: const_collapse_scoped(ast.handler),
                         finalizer: const_collapse_scoped(ast.finalizer),
                     };
                 case 'CatchClause':
