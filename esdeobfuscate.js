@@ -501,9 +501,9 @@ var esdeobfuscate = (function () {
                             ret.pure = true
                             return mkliteral(value)
                         } catch (e) {
-                            console.log('ast:', recast.print(ast).code)
-                            console.log('ret:', recast.print(ret).code)
-                            console.log('error when try to execute function', e.message)
+                            // console.log('ast:', recast.print(ast).code)
+                            // console.log('ret:', recast.print(ret).code)
+                            // console.log('error when try to execute function', e.message)
                             return ret
                         }
                     }
@@ -597,7 +597,8 @@ var esdeobfuscate = (function () {
                     // a.property
                     // a[1]
                     // a[[]]
-                    if (pureobject.value) {
+                    // 注意pure=true, value=undefined 的情况
+                    if (pureobject.pure || pureobject.value) {
                         ret.value = isSymbol(pureobject.value) ? ast2Symbol(ret) : pureobject.value[ret.property.name ? ret.property.name : ret.property.value]
                         ret.pure = isSymbol(ret.value) ? false : true
                     }
